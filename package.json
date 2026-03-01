@@ -1,0 +1,16 @@
+{
+  "name": "obsidian-ci",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node watcher.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "simple-git": "^3.32.3"
+  }
+}
