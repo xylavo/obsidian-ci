@@ -1,14 +1,16 @@
-# Obsidian CI
+# Obsidian CI/CD
 
-Obsidian 볼트의 파일 변경을 감시하여 자동으로 Git commit & push하는 백그라운드 도구.
+Obsidian 볼트의 파일 변경을 감시하여 자동으로 Git commit & push(CI)하고, 주기적으로 원격 변경사항을 pull(CD)하는 백그라운드 도구.
 
 ## 구조
 
 ```
-obsidian ci/
-├── config.js            # 볼트 경로, 디바운스, 커밋 메시지 설정
-├── git-sync.js          # git add → commit → push 로직
-├── watcher.js           # chokidar 기반 파일 감시
+obsidian-ci/
+├── config.js            # 볼트 경로, 디바운스, 주기 설정
+├── git-sync.js          # git add → commit → push 로직 (CI)
+├── git-pull.js          # fetch → pull --rebase → 충돌 시 강제 초기화 (CD)
+├── lock.js              # CI/CD 동시 실행 방지 공유 락
+├── watcher.js           # chokidar 기반 파일 감시 + pull 스케줄
 ├── start-watcher.bat    # Node 실행 배치 스크립트 (.env 로드 포함)
 ├── start-watcher.vbs    # 콘솔 창 숨김 래퍼
 ├── .env                 # 환경변수 (볼트 경로) — git 추적 안 됨
@@ -17,10 +19,23 @@ obsidian ci/
 
 ## 동작 방식
 
+### CI (로컬 → 원격)
+
 1. `watcher.js`가 Obsidian 볼트 디렉토리를 감시
-2. 파일 추가/변경/삭제 감지 시 30초 디바운스 후 동기화 실행
+2. 파일 추가/변경/삭제 감지 시 **30초 디바운스** 후 동기화 실행
 3. `git-sync.js`가 `git add -A` → `git commit` → `git push origin` 수행
 4. 커밋 메시지: `auto: 2026-03-01 14:30:00` 형식 (자동 생성)
+
+### CD (원격 → 로컬)
+
+1. 시작 시 즉시 1회, 이후 **5분 주기**로 원격 확인
+2. `git fetch` 후 로컬이 뒤처진 경우 `git pull --rebase` 실행
+3. 충돌 발생 시 `git rebase --abort` → `git reset --hard origin/<branch>`로 원격 버전 강제 적용
+4. 미커밋 변경사항이 있으면 pull 건너뜀 (CI가 먼저 커밋 후 다음 주기에 pull)
+
+### 동시 실행 방지
+
+CI(push)와 CD(pull)는 공유 락(`lock.js`)으로 동시에 실행되지 않는다. 한쪽이 실행 중이면 다른 쪽은 해당 턴을 건너뛴다.
 
 ## 설치
 
@@ -61,7 +76,8 @@ git remote add origin <원격 저장소 URL>
 
 | 항목 | 설명 | 기본값 |
 |------|------|--------|
-| `debounceMs` | 변경 감지 후 동기화 대기 시간 | `30000` (30초) |
+| `debounceMs` | 변경 감지 후 push 대기 시간 | `30000` (30초) |
+| `pullIntervalMs` | 원격 변경사항 확인 주기 | `300000` (5분) |
 | `ignoredPatterns` | 감시 제외 파일 패턴 | `['.obsidian/workspace.json']` |
 
 볼트 경로는 `.env`의 `OBSIDIAN_VAULT_PATH`로 설정한다.
@@ -114,7 +130,7 @@ $settings = New-ScheduledTaskSettingsSet `
 # Task Scheduler에 등록 (-Force: 같은 이름이 있으면 덮어쓰기)
 Register-ScheduledTask -TaskName 'ObsidianCIWatcher' `
     -Action $action -Trigger $trigger -Settings $settings `
-    -Description 'Obsidian CI Watcher' -Force
+    -Description 'Obsidian CI/CD Watcher' -Force
 ```
 
 > **실행 흐름**: 로그인 → `wscript.exe` → `start-watcher.vbs` → `start-watcher.bat` (.env 로드) → `node watcher.js`

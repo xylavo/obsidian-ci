@@ -7,6 +7,7 @@ if (!process.env.OBSIDIAN_VAULT_PATH) {
 module.exports = {
   vaultPath: path.resolve(process.env.OBSIDIAN_VAULT_PATH),
   debounceMs: 30_000,
+  pullIntervalMs: 5 * 60 * 1000,
   commitMessage: () => {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');

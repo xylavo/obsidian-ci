@@ -1,22 +1,18 @@
 const chokidar = require('chokidar');
 const config = require('./config');
 const { sync } = require('./git-sync');
+const { pull } = require('./git-pull');
+const { withLock } = require('./lock');
 
 let timer = null;
-let syncing = false;
 
 function scheduleSync() {
   if (timer) clearTimeout(timer);
-  timer = setTimeout(async () => {
-    if (syncing) return;
-    syncing = true;
-    try {
-      await sync();
-    } finally {
-      syncing = false;
-    }
-  }, config.debounceMs);
+  timer = setTimeout(() => withLock(sync), config.debounceMs);
 }
+
+withLock(pull);
+setInterval(() => withLock(pull), config.pullIntervalMs);
 
 const watcher = chokidar.watch(config.vaultPath, {
   ignored: [
